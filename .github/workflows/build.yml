@@ -59,7 +59,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: jf audit --secrets --sast --iac --server-id=mcodevisionaryorg
 
-      - name: Publish build-info and populate shared object cache
+      - name: Publish build-info, scan with Xray, and populate shared object cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           ARTIFACTORY_URL: https://mcodevisionaryorg.jfrog.io/artifactory/
@@ -85,5 +85,5 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           jf evd verify \
-            --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/${{ matrix.board }}/1.0.0/envsensor_fw" \
+            --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/${{ matrix.board }}/$(cat VERSION)/envsensor_fw" \
             --use-artifactory-keys

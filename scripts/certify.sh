@@ -20,7 +20,7 @@ LINE="$(grep "envsensor-fw/${BOARD}/" .last_build | tail -1 || true)"
 [[ -n "${LINE}" ]] || { echo "No recorded build found for ${BOARD} in .last_build." >&2; exit 1; }
 
 read -r REPO_PATH SHA256 B_NAME B_NUMBER <<< "${LINE}"
-VERSION="1.0.0"
+VERSION="$(cat VERSION)"
 GIT_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 
 mkdir -p evidence/generated

@@ -4,9 +4,15 @@ project(envsensor_fw C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(FW_VERSION_MAJOR 1)
-set(FW_VERSION_MINOR 0)
-set(FW_VERSION_PATCH 0)
+# Single source of truth for the firmware version — see VERSION at repo
+# root. scripts/build.sh and scripts/certify.sh read the same file so the
+# binary's self-reported version, its Artifactory path, and its
+# certification record can never drift apart.
+file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" FW_VERSION_STRING LIMIT_COUNT 1)
+string(REPLACE "." ";" FW_VERSION_LIST "${FW_VERSION_STRING}")
+list(GET FW_VERSION_LIST 0 FW_VERSION_MAJOR)
+list(GET FW_VERSION_LIST 1 FW_VERSION_MINOR)
+list(GET FW_VERSION_LIST 2 FW_VERSION_PATCH)
 
 if(NOT BOARD)
   message(FATAL_ERROR "Set -DBOARD=BOARD_A or -DBOARD=BOARD_B")

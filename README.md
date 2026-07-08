@@ -62,10 +62,10 @@ scripts/
 
 ```sh
 ./scripts/setup_artifactory.sh          # one-time: repos + signing key + token
-./scripts/build.sh BOARD_A              # build, cache, publish build-info
+./scripts/build.sh BOARD_A              # build, cache, publish build-info, Xray build-scan
 ./scripts/certify.sh BOARD_A "Jane Doe" "Acme Certification Authority"
 ./scripts/verify_reproducible.sh BOARD_A
-jf evd verify --subject-repo-path emb-airgap-demo-generic-local/envsensor-fw/BOARD_A/1.0.0/envsensor_fw \
+jf evd verify --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/BOARD_A/$(cat VERSION)/envsensor_fw" \
   --use-artifactory-keys --server-id=mcodevisionaryorg
 ```
 
@@ -149,7 +149,15 @@ command caught a real finding during development (untrusted input reaching
 an outgoing request in `artifactory_cache_proxy.py`, since fixed by
 normalizing the path before forwarding it upstream) and flagged the local
 `.env`/signing key as secrets when run against the working tree, which is
-exactly why both are gitignored rather than committed.
+exactly why both are gitignored rather than committed. That's source-code
+scanning, on the working tree, before anything is published.
+
+`scripts/build.sh` separately runs `jf build-scan` right after
+`build-publish` — Xray scanning the *published build-info*, not the source
+tree. Today it reports "no vulnerable dependencies" because this project
+has no package manager, so there's no dependency graph for Xray SCA to
+match against; in a real project this is the gate that would block
+promotion/certification on Xray findings before `certify.sh` ever runs.
 
 Two Frogbot workflows are also included (`frogbot-scan-pull-request.yml`,
 `frogbot-scan-repository.yml`), which is JFrog's documented path for

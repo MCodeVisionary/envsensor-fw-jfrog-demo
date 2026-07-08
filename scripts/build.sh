@@ -52,7 +52,7 @@ CCACHE_DIR="${CCACHE_DIR}" ccache -s | grep -E "cache hit|cache miss|Hits|Misses
 
 ARTIFACT="${BUILD_DIR}/envsensor_fw"
 SHA256="$(shasum -a 256 "${ARTIFACT}" | awk '{print $1}')"
-VERSION="1.0.0"
+VERSION="$(cat VERSION)"
 BUILD_NUMBER="${BOARD}.$(date +%Y%m%d%H%M%S)"
 REPO_PATH="${GENERIC_REPO}/envsensor-fw/${BOARD}/${VERSION}/envsensor_fw"
 
@@ -66,6 +66,14 @@ jf rt upload "${ARTIFACT}" "${REPO_PATH}" \
   --server-id="${SERVER_ID}"
 
 jf rt build-publish "${BUILD_NAME}" "${BUILD_NUMBER}" --server-id="${SERVER_ID}"
+
+echo "==> Scanning published build-info with Xray..."
+# --fail=false: this project has no package manager, so there's no
+# dependency graph for Xray SCA to match against — nothing to gate on today,
+# but this is where a real project's build would block promotion/
+# certification on Xray findings. --vuln surfaces raw vulnerability data
+# even without a project/watch configured (violations require one).
+jf build-scan "${BUILD_NAME}" "${BUILD_NUMBER}" --fail=false --vuln --server-id="${SERVER_ID}"
 
 echo ""
 echo "==> Done."
