@@ -1,0 +1,67 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board: [BOARD_A, BOARD_B]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ccache
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
+      - name: Configure
+        run: cmake -S . -B build/${{ matrix.board }} -DBOARD=${{ matrix.board }}
+
+      - name: Build
+        run: cmake --build build/${{ matrix.board }}
+
+      - name: Unit tests
+        run: ctest --test-dir build/${{ matrix.board }} --output-on-failure
+
+      - name: Verify reproducibility
+        run: ./scripts/verify_reproducible.sh ${{ matrix.board }}
+
+      # The steps below publish the artifact, build-info, and signed
+      # certification evidence to the JFrog demo instance. They only run on
+      # pushes to main (never on pull_request, including from forks) so the
+      # JF_ACCESS_TOKEN secret is never exposed to untrusted workflow runs.
+      - name: Install JFrog CLI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: jfrog/setup-jfrog-cli@v4
+
+      - name: Configure JFrog CLI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        run: |
+          jf config add mcodevisionaryorg \
+            --url=https://mcodevisionaryorg.jfrog.io \
+            --access-token="$JF_ACCESS_TOKEN" \
+            --interactive=false
+          jf config use mcodevisionaryorg
+
+      - name: Publish build-info and populate shared object cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ARTIFACTORY_URL: https://mcodevisionaryorg.jfrog.io/artifactory/
+          ARTIFACTORY_CCACHE_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        run: ./scripts/build.sh ${{ matrix.board }}
+
+      - name: Attach certification evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./scripts/certify.sh ${{ matrix.board }} "GitHub Actions CI" "Automated CI Certification"
+
+      - name: Independently verify certification evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          jf evd verify \
+            --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/${{ matrix.board }}/1.0.0/envsensor_fw" \
+            --use-artifactory-keys
