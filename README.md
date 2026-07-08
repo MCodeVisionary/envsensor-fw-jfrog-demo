@@ -1,8 +1,7 @@
 # envsensor-fw — JFrog for long-lifecycle embedded systems (demo)
 
 A small embedded-C firmware project used to demonstrate how JFrog Artifactory
-addresses three problems common to embedded programs with **10-40 year
-support tails**:
+addresses three problems common to long-lifecycle embedded programs:
 
 1. **Reproducible builds** — the same commit rebuilds to a byte-identical
    binary, anywhere, so a device can be recertified or patched decades later
@@ -25,7 +24,7 @@ end of the air gap.
 
 | Client requirement | How this demo shows it |
 | --- | --- |
-| 10-40 year artifact lifecycle | Immutable local repo, checksum-addressed evidence, no dependency on CI history |
+| Long artifact lifecycle | Immutable local repo, checksum-addressed evidence, no dependency on CI history |
 | Slow Windows-based builds | ccache pointed at an Artifactory-backed shared object cache (works identically on Windows) |
 | Certification tracking | JFrog Evidence: signed DSSE envelope bound to the artifact digest |
 | Reproducible builds | Pinned toolchain flags, `SOURCE_DATE_EPOCH`, path-independent debug info, verified by rebuilding twice |
