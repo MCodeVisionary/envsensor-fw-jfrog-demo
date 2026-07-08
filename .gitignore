@@ -8,3 +8,4 @@ evidence-keys/*.pub
 .ccache-local/
 .last_build
 evidence/generated/
+.claude/

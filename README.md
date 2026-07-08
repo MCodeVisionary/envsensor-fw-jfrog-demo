@@ -123,3 +123,41 @@ confirm the certification independent of whoever holds the private key
 today — the property that matters when the person who certified a board in
 year 1 is unreachable by year 25. A parallel `jf rt set-props` call also
 stamps quick-glance `cert.*` properties for UI/AQL filtering.
+
+## CI/CD (GitHub Actions)
+
+`.github/workflows/build.yml` runs on every push/PR: cmake build + ctest +
+reproducibility check for both boards, no credentials required. On pushes to
+`main` it goes further — authenticates to JFrog via **OIDC** (no static
+platform token stored in GitHub at all), runs a security scan, then
+publishes build-info, populates the shared cache, and attaches signed
+certification evidence.
+
+Authentication uses GitHub's OIDC identity federation: the workflow requests
+a short-lived GitHub Actions ID token (`permissions: id-token: write`),
+which JFrog exchanges for a scoped Artifactory access token via an identity
+mapping configured on the platform (`github-docportal` provider, mapped to
+this repo). Nothing long-lived is stored as a GitHub secret for platform
+auth — only `EVIDENCE_SIGNING_KEY` (the certification signing key) remains a
+static secret, since it's a cryptographic key, not a bearer credential to
+the platform.
+
+### Security scanning
+
+`jf audit --secrets --sast --iac` runs in CI before publishing — the same
+command caught a real finding during development (untrusted input reaching
+an outgoing request in `artifactory_cache_proxy.py`, since fixed by
+normalizing the path before forwarding it upstream) and flagged the local
+`.env`/signing key as secrets when run against the working tree, which is
+exactly why both are gitignored rather than committed.
+
+Two Frogbot workflows are also included (`frogbot-scan-pull-request.yml`,
+`frogbot-scan-repository.yml`), which is JFrog's documented path for
+repo/PR-level scanning, including **JFrog Snippet Detection** — matching
+code (including AI-generated code) against the JFrog Catalog to surface
+license and CVE risk from copied/generated snippets. Snippet Detection
+itself isn't a flag you pass to `jf audit`/`jf scan` (checked both the
+CLI's current release and latest — no such flag exists yet); it's a
+Catalog-matching capability that surfaces automatically in scan results
+once the platform's entitlement (JFrog Unified Bundle) includes it, via
+Xray/Frogbot rather than a standalone command.

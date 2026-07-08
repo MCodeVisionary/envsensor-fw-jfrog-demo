@@ -1,0 +1,26 @@
+name: "Frogbot Scan Repository"
+on:
+  workflow_dispatch:
+  schedule:
+    # Once a day at 00:00 UTC.
+    - cron: "0 0 * * *"
+  push:
+    branches:
+      - main
+permissions:
+  pull-requests: write
+  contents: write
+  security-events: write
+  id-token: write
+
+jobs:
+  scan-repository:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: jfrog/frogbot@v3
+        with:
+          oidc-provider-name: github-docportal
+        env:
+          JF_URL: https://mcodevisionaryorg.jfrog.io
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JF_GIT_BASE_BRANCH: main

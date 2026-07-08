@@ -14,8 +14,10 @@ Usage: artifactory_cache_proxy.py <listen_port> <artifactory_base_url> <repo_key
 """
 import http.server
 import os
+import posixpath
 import ssl
 import sys
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -46,7 +48,16 @@ def _build_ssl_context():
 
 class CacheProxyHandler(http.server.BaseHTTPRequestHandler):
     def _forward(self, method):
-        url = f"{UPSTREAM_BASE}{self.path}"
+        # ccache only ever requests keys it generated itself, but this proxy
+        # still shouldn't blindly splice untrusted path segments into the
+        # upstream URL — normalize first so "../" can't escape the repo the
+        # proxy was launched for.
+        raw_path = urllib.parse.urlsplit(self.path).path
+        safe_path = posixpath.normpath(raw_path)
+        if not safe_path.startswith("/"):
+            safe_path = "/" + safe_path
+
+        url = f"{UPSTREAM_BASE}{safe_path}"
         body = None
         if method == "PUT":
             length = int(self.headers.get("Content-Length", 0))
