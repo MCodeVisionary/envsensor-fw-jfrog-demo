@@ -9,6 +9,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         board: [BOARD_A, BOARD_B]
     steps:
@@ -54,6 +55,15 @@ jobs:
           ARTIFACTORY_URL: https://mcodevisionaryorg.jfrog.io/artifactory/
           ARTIFACTORY_CCACHE_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
         run: ./scripts/build.sh ${{ matrix.board }}
+
+      - name: Install evidence signing key
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          EVIDENCE_SIGNING_KEY: ${{ secrets.EVIDENCE_SIGNING_KEY }}
+        run: |
+          mkdir -p evidence-keys
+          printf '%s\n' "$EVIDENCE_SIGNING_KEY" > evidence-keys/envsensor-cert.key
+          chmod 600 evidence-keys/envsensor-cert.key
 
       - name: Attach certification evidence
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
