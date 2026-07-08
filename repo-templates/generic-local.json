@@ -1,0 +1,7 @@
+{
+  "key": "emb-airgap-demo-generic-local",
+  "rclass": "local",
+  "packageType": "generic",
+  "description": "Release artifacts for the envsensor-fw embedded demo — immutable, long-retention storage for firmware binaries tied to build-info and certification evidence.",
+  "repoLayoutRef": "simple-default"
+}

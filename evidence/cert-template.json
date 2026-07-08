@@ -1,0 +1,13 @@
+{
+  "certificationStandard": "Functional Safety Compliance Record (demo placeholder — swap for the client's real standard, e.g. IEC 61508 / DO-178C / IEC 62304)",
+  "certifyingBody": "__CERTIFYING_BODY__",
+  "certifyingEngineer": "__CERTIFYING_ENGINEER__",
+  "certificationDate": "__CERTIFICATION_DATE__",
+  "buildName": "__BUILD_NAME__",
+  "buildNumber": "__BUILD_NUMBER__",
+  "board": "__BOARD__",
+  "firmwareVersion": "__FW_VERSION__",
+  "gitCommit": "__GIT_COMMIT__",
+  "artifactSha256": "__ARTIFACT_SHA256__",
+  "statement": "This build was produced from a reproducible, checksum-verified pipeline and is certified against the standard above as of the certification date. This evidence is cryptographically signed and permanently bound to the artifact's SHA-256 digest, remaining verifiable for the lifetime of the fielded device (10-40 years)."
+}

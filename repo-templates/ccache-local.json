@@ -1,0 +1,7 @@
+{
+  "key": "emb-airgap-demo-ccache-local",
+  "rclass": "local",
+  "packageType": "generic",
+  "description": "Shared ccache secondary-storage backend for envsensor-fw. Any build machine (including slow Windows dev boxes) reads/writes pre-built object cache entries here over HTTP, so a clean checkout still gets cache hits.",
+  "repoLayoutRef": "simple-default"
+}

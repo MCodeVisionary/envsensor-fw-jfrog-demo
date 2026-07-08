@@ -1,0 +1,10 @@
+build/
+build-repro/
+*.o
+*.sha256
+evidence-keys/*.key
+evidence-keys/*.pub
+.env
+.ccache-local/
+.last_build
+evidence/generated/

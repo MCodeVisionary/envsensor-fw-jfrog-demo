@@ -1,0 +1,80 @@
+cmake_minimum_required(VERSION 3.16)
+project(envsensor_fw C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+set(FW_VERSION_MAJOR 1)
+set(FW_VERSION_MINOR 0)
+set(FW_VERSION_PATCH 0)
+
+if(NOT BOARD)
+  message(FATAL_ERROR "Set -DBOARD=BOARD_A or -DBOARD=BOARD_B")
+endif()
+if(NOT BOARD STREQUAL "BOARD_A" AND NOT BOARD STREQUAL "BOARD_B")
+  message(FATAL_ERROR "Unknown BOARD '${BOARD}'. Valid values: BOARD_A, BOARD_B")
+endif()
+
+# --- Cross toolchain (falls back to the host compiler for this demo) ------
+find_program(ARM_GCC arm-none-eabi-gcc)
+if(ARM_GCC AND CMAKE_C_COMPILER MATCHES "arm-none-eabi-gcc")
+  message(STATUS "Cross-compiling for embedded target with ${CMAKE_C_COMPILER}")
+else()
+  message(WARNING
+    "arm-none-eabi-gcc not found/selected — building a HOST SIMULATION "
+    "binary with ${CMAKE_C_COMPILER} for demo purposes. Point "
+    "CMAKE_TOOLCHAIN_FILE at a real cross toolchain to produce flashable "
+    "firmware.")
+endif()
+
+# --- Reproducible-build plumbing ------------------------------------------
+# SOURCE_DATE_EPOCH pins the embedded build timestamp so rebuilding the same
+# commit on any machine, any day, produces a byte-identical artifact.
+if(DEFINED ENV{SOURCE_DATE_EPOCH})
+  set(FW_BUILD_EPOCH $ENV{SOURCE_DATE_EPOCH})
+else()
+  set(FW_BUILD_EPOCH 0)
+endif()
+
+find_package(Git QUIET)
+if(GIT_FOUND)
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse --short=12 HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE FW_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE GIT_REV_RESULT)
+endif()
+if(NOT FW_GIT_COMMIT OR NOT GIT_REV_RESULT EQUAL 0)
+  set(FW_GIT_COMMIT "unknown")
+endif()
+
+set(FW_BOARD_NAME ${BOARD})
+configure_file(${CMAKE_SOURCE_DIR}/include/version.h.in
+               ${CMAKE_BINARY_DIR}/generated/version.h @ONLY)
+
+# Strip absolute build-path noise from debug info / macros (__FILE__, etc.)
+# so two checkouts at different paths still produce identical bytes.
+add_compile_options(
+  -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.
+  -Wall -Wextra)
+
+add_executable(envsensor_fw
+  src/main.c
+  src/sensor.c
+  src/crc.c)
+
+target_include_directories(envsensor_fw PRIVATE
+  include
+  ${CMAKE_BINARY_DIR}/generated)
+
+target_compile_definitions(envsensor_fw PRIVATE ${BOARD})
+
+# --- Reproducibility fingerprint -------------------------------------------
+add_custom_command(TARGET envsensor_fw POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E sha256sum $<TARGET_FILE:envsensor_fw>
+  COMMENT "SHA-256 of freshly built artifact")
+
+enable_testing()
+add_subdirectory(tests)
