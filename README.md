@@ -161,3 +161,17 @@ CLI's current release and latest — no such flag exists yet); it's a
 Catalog-matching capability that surfaces automatically in scan results
 once the platform's entitlement (JFrog Unified Bundle) includes it, via
 Xray/Frogbot rather than a standalone command.
+
+### Something for Snippet Detection to actually find
+
+`third_party/` has two real, unmodified upstream files dropped in the way
+this actually happens in practice — no package manager, no license review:
+zlib 1.2.11's `crc32.c` (permissive license, actually wired into the build
+via `src/interop_checksum.c` as a second checksum for interop with an
+external tool) and FFmpeg's `libavutil/crc.c` (LGPL-2.1-or-later — a
+copyleft license with real obligations — vendored but never compiled,
+i.e. dead code nobody remembers is there). See `third_party/README.md` for
+why both are worth flagging even though neither trips `jf audit`'s
+secrets/SAST/IaC scanners: the risk here is unmanaged provenance and
+license exposure, which is specifically what Catalog-based Snippet
+Detection is for, not what SCA/SAST catches.

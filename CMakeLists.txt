@@ -63,13 +63,21 @@ add_compile_options(
 add_executable(envsensor_fw
   src/main.c
   src/sensor.c
-  src/crc.c)
+  src/crc.c
+  src/interop_checksum.c
+  third_party/zlib-1.2.11/crc32.c)
 
 target_include_directories(envsensor_fw PRIVATE
   include
+  third_party/zlib-1.2.11
   ${CMAKE_BINARY_DIR}/generated)
 
 target_compile_definitions(envsensor_fw PRIVATE ${BOARD})
+
+# Vendored, unmodified upstream source (see third_party/README.md) — hold it
+# to its own project's style, not ours.
+set_source_files_properties(third_party/zlib-1.2.11/crc32.c PROPERTIES
+  COMPILE_OPTIONS "-Wno-deprecated-non-prototype;-Wno-macro-redefined")
 
 # --- Reproducibility fingerprint -------------------------------------------
 add_custom_command(TARGET envsensor_fw POST_BUILD
