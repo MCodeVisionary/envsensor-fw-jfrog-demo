@@ -77,6 +77,14 @@ jobs:
           printf '%s\n' "$EVIDENCE_SIGNING_KEY" > evidence-keys/envsensor-cert.key
           chmod 600 evidence-keys/envsensor-cert.key
 
+      - name: Xray SCA scan (declared vendored C deps)
+        if: github.ref == 'refs/heads/main'
+        env:
+          JF_URL: ${{ secrets.JF_URL }}
+        run: |
+          ./scripts/xray_scan.sh BOARD_A
+          ./scripts/xray_scan.sh BOARD_B
+
       - name: Attach certification evidence
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: ./scripts/certify.sh ${{ matrix.board }} "GitHub Actions CI" "Automated CI Certification"
