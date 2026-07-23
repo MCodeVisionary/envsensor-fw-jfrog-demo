@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 #
-# xray_scan.sh — publish an "SCA-flavoured" build-info that declares the
-# vendored third-party C sources (zlib, FFmpeg) so Xray can match them
-# against its CVE database.
+# xray_scan.sh — splice a declared C/C++ dependency graph into the
+# already-published envsensor-fw build-info for one board, so Xray can
+# match the vendored third-party sources against its CVE database.
 #
-# Rationale: this project has no package manager, so the natively-published
-# build-info from build.sh has an empty dependency graph and Xray SCA reports
-# "no vulnerable dependencies". This script generates a *parallel* build-info
-# whose modules[].dependencies list the vendored upstream libs by
-# Conan-style component ID (name:version) + SHA-256, uploads it via
-# /api/build, then triggers a scan. It never overwrites the real build-info
-# produced by build.sh — a distinct build name (${BUILD_NAME}-xray-cpp) is
-# used so the certification/reproducibility record stays intact.
+# Rationale: this project has no package manager, so the build-info
+# build.sh publishes only ever gets a "generic" module (the uploaded
+# artifact) with no dependency graph for Xray SCA to match against — jf
+# has nothing to derive one from. This script fetches that same build
+# (same name + number build.sh already published, read from .last_build),
+# adds a "dependencies" array listing the vendored upstream libs by
+# Conan-style component ID (name:version) + SHA-256, and republishes it in
+# place via PUT /api/build — same build name and number as the certified
+# build, not a separate one, so it shows up as one build in Artifactory.
+#
+# Since evidence (scripts/certify.sh) is signed over the artifact's
+# SHA-256 at its repo path, not over the build-info JSON, updating the
+# build-info here afterward doesn't invalidate anything already certified.
 #
 # Follows JFrog's documented pattern for C/C++ scanning without Conan:
 # https://jfrog.com/help/r/jfrog-artifactory-documentation/conan-and-c/c-support-in-xray
 #
 # Usage:
-#   ./scripts/xray_scan.sh BOARD_A [BUILD_NUMBER]
+#   ./scripts/xray_scan.sh BOARD_A|BOARD_B
 #
 # Deps: jf (configured), jq, sha256sum (coreutils) or shasum (macOS)
 
@@ -27,16 +32,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common.sh
 source "${SCRIPT_DIR}/common.sh"
 
-BOARD="${1:?usage: xray_scan.sh BOARD_A|BOARD_B [BUILD_NUMBER]}"
-BUILD_NUMBER="${2:-${GITHUB_RUN_NUMBER:-$(date +%s)}}"
-
-# Real build-info name published by build.sh is ${BUILD_NAME}. We publish
-# our injected one under a *different* name so the two never collide.
-: "${BUILD_NAME:?BUILD_NAME must be set by common.sh}"
-XRAY_BUILD_NAME="${BUILD_NAME}-xray-cpp"
+BOARD="${1:?usage: xray_scan.sh BOARD_A|BOARD_B}"
 
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 THIRD_PARTY_DIR="${REPO_ROOT}/third_party"
+
+[[ -f "${REPO_ROOT}/.last_build" ]] || { echo "No builds recorded yet — run scripts/build.sh ${BOARD} first." >&2; exit 1; }
+LINE="$(grep "envsensor-fw/${BOARD}/" "${REPO_ROOT}/.last_build" | tail -1 || true)"
+[[ -n "${LINE}" ]] || { echo "No recorded build found for ${BOARD} in .last_build — run scripts/build.sh ${BOARD} first." >&2; exit 1; }
+read -r _REPO_PATH _SHA256 BUILD_NAME BUILD_NUMBER <<< "${LINE}"
 
 # ---------------------------------------------------------------------------
 # Declared vendored components. Edit component_id when a different upstream
@@ -96,51 +100,38 @@ fi
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
-echo "==> Seeding skeleton build-info via 'jf rt bp --dry-run'"
-jf rt bp \
-  --dry-run=true \
+echo "==> Fetching published build-info (build=${BUILD_NAME}/${BUILD_NUMBER})..."
+jf rt curl -XGET "/api/build/${BUILD_NAME}/${BUILD_NUMBER}" \
   --server-id="${SERVER_ID}" \
-  "${XRAY_BUILD_NAME}" "${BUILD_NUMBER}" \
-  > "${WORK_DIR}/skeleton.json"
+  > "${WORK_DIR}/existing.json"
 
-# 'jf rt bp --dry-run' may or may not include a modules array depending on
-# whether prior 'jf rt bce' / 'jf rt ba' calls populated one. Force it to
-# exist so our jq expression is well-defined. Also force top-level
-# "version" — Artifactory's build-info deserializer requires it and rejects
-# the whole payload with an opaque "unable to parse JSON" 400 if it's
-# missing, which newer 'jf rt bp --dry-run' output doesn't always stamp in.
-jq 'if has("modules") | not then . + {"modules":[]} else . end
-    | if has("version") | not then . + {"version":"1.0.1"} else . end' \
-  "${WORK_DIR}/skeleton.json" > "${WORK_DIR}/with_modules.json"
+# Artifactory's GET /api/build/{name}/{number} wraps the payload in
+# {"buildInfo": {...}} on some versions, returns it flat on others.
+jq 'if has("buildInfo") then .buildInfo else . end' \
+  "${WORK_DIR}/existing.json" > "${WORK_DIR}/unwrapped.json"
 
-echo "==> Injecting cpp module + vendored dependencies"
-MODULE_ID="envsensor_fw:${BOARD}"
-jq --arg mid "${MODULE_ID}" \
-   --argjson deps "${DEPENDENCIES_JSON}" \
-   '.modules = [{
-        "id": $mid,
-        "type": "cpp",
-        "dependencies": $deps
-    }]' \
-   "${WORK_DIR}/with_modules.json" > "${WORK_DIR}/build_info_xray.json"
+echo "==> Splicing vendored dependencies into modules[0]"
+jq --argjson deps "${DEPENDENCIES_JSON}" \
+   '.modules[0].type = "cpp" | .modules[0].dependencies = $deps' \
+   "${WORK_DIR}/unwrapped.json" > "${WORK_DIR}/build_info_with_deps.json"
 
-echo "==> Injected build-info:"
-jq '.' "${WORK_DIR}/build_info_xray.json"
+echo "==> Updated build-info:"
+jq '.' "${WORK_DIR}/build_info_with_deps.json"
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
-    echo "### Xray build-info — ${XRAY_BUILD_NAME} #${BUILD_NUMBER} (${BOARD})"
+    echo "### Xray build-info — ${BUILD_NAME} #${BUILD_NUMBER} (${BOARD})"
     echo '```json'
-    jq '.' "${WORK_DIR}/build_info_xray.json"
+    jq '.' "${WORK_DIR}/build_info_with_deps.json"
     echo '```'
   } >> "${GITHUB_STEP_SUMMARY}"
 fi
 
-echo "==> Publishing to /api/build"
+echo "==> Publishing updated build-info to /api/build"
 jf rt curl \
   -XPUT /api/build \
   -H "Content-Type: application/json" \
-  -T "${WORK_DIR}/build_info_xray.json" \
+  -T "${WORK_DIR}/build_info_with_deps.json" \
   --server-id="${SERVER_ID}"
 
 echo
@@ -149,7 +140,7 @@ echo "==> Triggering Xray build scan"
 # still wiring things up. Flip to --fail=true once the pipeline is
 # expected to gate promotion on scan results.
 jf build-scan \
-  "${XRAY_BUILD_NAME}" "${BUILD_NUMBER}" \
+  "${BUILD_NAME}" "${BUILD_NUMBER}" \
   --server-id="${SERVER_ID}" \
   --fail=false \
   --format=table \
@@ -157,8 +148,8 @@ jf build-scan \
 
 echo
 echo "Done. View in the Artifactory UI:"
-echo "  Builds > ${XRAY_BUILD_NAME} > ${BUILD_NUMBER} > Xray Data"
+echo "  Builds > ${BUILD_NAME} > ${BUILD_NUMBER} > Xray Data"
 echo
 echo "Note: the build must be added to Xray > Indexed Resources > Builds"
 echo "before scan results appear. setup_artifactory.sh handles this for"
-echo "the primary build; add '${XRAY_BUILD_NAME}' there too on first run."
+echo "the primary build."
