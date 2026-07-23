@@ -82,13 +82,12 @@ jf rt upload "${ARTIFACT_ZIP}" "${REPO_PATH}" \
 
 jf rt build-publish "${BUILD_NAME}" "${BUILD_NUMBER}" --server-id="${SERVER_ID}"
 
-echo "==> Scanning published build-info with Xray..."
-# --fail=false: this project has no package manager, so there's no
-# dependency graph for Xray SCA to match against — nothing to gate on today,
-# but this is where a real project's build would block promotion/
-# certification on Xray findings. --vuln surfaces raw vulnerability data
-# even without a project/watch configured (violations require one).
-jf build-scan "${BUILD_NAME}" "${BUILD_NUMBER}" --fail=false --vuln --server-id="${SERVER_ID}"
+# No build-scan here: this project has no package manager, so at this point
+# the build-info has no dependency graph yet -- nothing for Xray SCA to
+# match against. scripts/xray_scan.sh splices in the vendored C/C++
+# dependency graph and performs the real scan afterward. Scanning here too
+# would lock in a dependency-less result that xray_scan.sh's later --rescan
+# can't undo, hiding real findings -- one scan, after the data exists.
 
 echo ""
 echo "==> Done."

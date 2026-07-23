@@ -157,10 +157,11 @@ echo "==> Triggering Xray build scan"
 # --fail=false so a demo run with real CVEs doesn't kill CI while we're
 # still wiring things up. Flip to --fail=true once the pipeline is
 # expected to gate promotion on scan results.
-# --rescan=true: build.sh already scans this exact build name+number right
-# after publishing it (before this script's dependencies exist). Without
-# --rescan, Xray treats this as an already-scanned build and returns that
-# earlier (dependency-less) result instead of reprocessing.
+# --rescan=true: harmless insurance in case this build name+number was
+# ever scanned before this script added dependencies (build.sh itself no
+# longer does, but re-running this script by hand against an
+# already-scanned build should still force reprocessing rather than
+# silently returning a stale, dependency-less result).
 jf build-scan \
   "${BUILD_NAME}" "${BUILD_NUMBER}" \
   --server-id="${SERVER_ID}" \
