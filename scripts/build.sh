@@ -19,6 +19,7 @@ if [[ -z "${ARTIFACTORY_CCACHE_TOKEN:-}" ]]; then
 fi
 
 command -v ccache >/dev/null || { echo "ccache not found — install it first (brew install ccache)." >&2; exit 1; }
+command -v zip >/dev/null || { echo "zip not found — install it first (apt-get install zip / brew install zip)." >&2; exit 1; }
 
 # --- Bring up the local HTTP->HTTPS cache proxy in front of Artifactory ---
 PROXY_PORT="${CCACHE_PROXY_PORT:-8081}"
@@ -51,16 +52,30 @@ echo "==> ccache stats for this build:"
 CCACHE_DIR="${CCACHE_DIR}" ccache -s | grep -E "cache hit|cache miss|Hits|Misses" || true
 
 ARTIFACT="${BUILD_DIR}/envsensor_fw"
-SHA256="$(shasum -a 256 "${ARTIFACT}" | awk '{print $1}')"
 VERSION="$(cat VERSION)"
 BUILD_NUMBER="${BOARD}.$(date +%Y%m%d%H%M%S)"
-REPO_PATH="${GENERIC_REPO}/envsensor-fw/${BOARD}/${VERSION}/envsensor_fw"
+
+# Xray only scans archive/compressed formats in generic repos (zip, tar, 7z,
+# etc.) -- it never opens a raw single binary to look for embedded
+# components: https://docs.jfrog.com/security/docs/supported-technologies-xray
+# So the published artifact is a zip, not the raw ELF. Pin the zipped
+# entry's mtime to SOURCE_DATE_EPOCH (same value used for the compile
+# itself) and strip extra file attributes (-X) so re-zipping an identical
+# binary on any machine produces byte-identical zip output too -- the zip
+# step must stay reproducible, not just the binary inside it.
+ARTIFACT_ZIP="${BUILD_DIR}/envsensor_fw.zip"
+touch -t "$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y%m%d%H%M.%S 2>/dev/null || date -u -r "${SOURCE_DATE_EPOCH}" +%Y%m%d%H%M.%S)" "${ARTIFACT}"
+rm -f "${ARTIFACT_ZIP}"
+zip -X -j "${ARTIFACT_ZIP}" "${ARTIFACT}" >/dev/null
+
+SHA256="$(shasum -a 256 "${ARTIFACT_ZIP}" | awk '{print $1}')"
+REPO_PATH="${GENERIC_REPO}/envsensor-fw/${BOARD}/${VERSION}/envsensor_fw.zip"
 
 echo "==> Publishing build-info (build=${BUILD_NAME}/${BUILD_NUMBER})..."
 jf rt build-collect-env "${BUILD_NAME}" "${BUILD_NUMBER}"
 jf rt build-add-git "${BUILD_NAME}" "${BUILD_NUMBER}"
 
-jf rt upload "${ARTIFACT}" "${REPO_PATH}" \
+jf rt upload "${ARTIFACT_ZIP}" "${REPO_PATH}" \
   --build-name="${BUILD_NAME}" --build-number="${BUILD_NUMBER}" \
   --target-props="board=${BOARD};fw.version=${VERSION};git.commit=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)" \
   --server-id="${SERVER_ID}"

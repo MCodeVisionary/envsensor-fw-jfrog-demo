@@ -91,5 +91,5 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           jf evd verify \
-            --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/${{ matrix.board }}/$(cat VERSION)/envsensor_fw" \
+            --subject-repo-path "emb-airgap-demo-generic-local/envsensor-fw/${{ matrix.board }}/$(cat VERSION)/envsensor_fw.zip" \
             --use-artifactory-keys
