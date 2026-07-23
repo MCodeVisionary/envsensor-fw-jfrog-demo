@@ -44,8 +44,8 @@ THIRD_PARTY_DIR="${REPO_ROOT}/third_party"
 # ---------------------------------------------------------------------------
 # Format: "component_id|path_relative_to_repo_root"
 VENDORED_COMPONENTS=(
-  "zlib:1.2.11|third_party/zlib/crc32.c"
-  "ffmpeg:4.4|third_party/ffmpeg/libavutil/crc.c"
+  "zlib:1.2.11|third_party/zlib-1.2.11/crc32.c"
+  "ffmpeg:n6.1|third_party/ffmpeg-n6.1/crc.c"
 )
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ trap 'rm -rf "${WORK_DIR}"' EXIT
 echo "==> Seeding skeleton build-info via 'jf rt bp --dry-run'"
 jf rt bp \
   --dry-run=true \
-  --server-id="${JFROG_SERVER_ID}" \
+  --server-id="${SERVER_ID}" \
   "${XRAY_BUILD_NAME}" "${BUILD_NUMBER}" \
   > "${WORK_DIR}/skeleton.json"
 
@@ -121,12 +121,21 @@ jq --arg mid "${MODULE_ID}" \
 echo "==> Injected build-info:"
 jq '.' "${WORK_DIR}/build_info_xray.json"
 
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo "### Xray build-info — ${XRAY_BUILD_NAME} #${BUILD_NUMBER} (${BOARD})"
+    echo '```json'
+    jq '.' "${WORK_DIR}/build_info_xray.json"
+    echo '```'
+  } >> "${GITHUB_STEP_SUMMARY}"
+fi
+
 echo "==> Publishing to /api/build"
 jf rt curl \
   -XPUT /api/build \
   -H "Content-Type: application/json" \
   -T "${WORK_DIR}/build_info_xray.json" \
-  --server-id="${JFROG_SERVER_ID}"
+  --server-id="${SERVER_ID}"
 
 echo
 echo "==> Triggering Xray build scan"
@@ -135,7 +144,7 @@ echo "==> Triggering Xray build scan"
 # expected to gate promotion on scan results.
 jf build-scan \
   "${XRAY_BUILD_NAME}" "${BUILD_NUMBER}" \
-  --server-id="${JFROG_SERVER_ID}" \
+  --server-id="${SERVER_ID}" \
   --fail=false \
   --format=table \
   --vuln=true || true
