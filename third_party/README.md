@@ -43,3 +43,15 @@ does: copied in for reference or a feature that never shipped, never
 wired into the build, never removed — but still a license liability sitting
 in version control, invisible unless something is specifically looking for
 it (which is the entire point).
+
+## `sqlite3-299.1.0.8/` and `poco-1.9.0.0/` — synthetic, not real vendored code
+
+Unlike the two directories above, these each hold a single fabricated
+placeholder `.c` file — not real SQLite or POCO source, and never compiled
+into `envsensor_fw`. They exist only so `scripts/xray_scan.sh` can declare
+`sqlite3:299.1.0.8` and `poco:1.9.0.0` as dependencies in the generated Xray
+build-info, matching the exact component IDs used in JFrog's own C/C++ Xray
+scanning walkthrough (https://github.com/MaharshiPatel/helloworld), which
+are known to resolve to real CVE data in Xray's catalog — useful for a demo
+scan that's guaranteed to surface findings without waiting on zlib/ffmpeg's
+own CVE history.

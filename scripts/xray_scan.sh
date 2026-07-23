@@ -46,6 +46,8 @@ THIRD_PARTY_DIR="${REPO_ROOT}/third_party"
 VENDORED_COMPONENTS=(
   "zlib:1.2.11|third_party/zlib-1.2.11/crc32.c"
   "ffmpeg:n6.1|third_party/ffmpeg-n6.1/crc.c"
+  "sqlite3:299.1.0.8|third_party/sqlite3-299.1.0.8/sqlite3_stub.c"
+  "poco:1.9.0.0|third_party/poco-1.9.0.0/poco_stub.c"
 )
 
 # ---------------------------------------------------------------------------
