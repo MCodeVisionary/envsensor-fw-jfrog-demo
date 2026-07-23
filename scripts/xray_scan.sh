@@ -153,30 +153,38 @@ jf rt curl \
   --server-id="${SERVER_ID}"
 
 echo
-# Give Xray's backend a moment to index the just-published build-info
-# before triggering a scan against it. Confirmed empirically: firing the
-# scan immediately after the PUT produced inconsistent results on live CI
-# runs (a transient 404 "build doesn't exist or not indexed in Xray" on one
-# board, a scan that completed but found nothing on the other) even though
-# the same publish+scan sequence run by hand, with natural delay between
-# commands, found the expected CVEs every time.
-sleep 10
-
 echo "==> Triggering Xray build scan"
 # --fail=false so a demo run with real CVEs doesn't kill CI while we're
 # still wiring things up. Flip to --fail=true once the pipeline is
 # expected to gate promotion on scan results.
-# No --rescan=true: that flag assumes a prior scan already exists to
-# re-evaluate and 404s ("build doesn't exist or not indexed in Xray") on a
-# build number's first-ever scan -- confirmed on a live CI run. Since
-# build.sh no longer scans this build before dependencies exist, this is
-# always the first scan, so a plain scan is correct.
-jf build-scan \
-  "${BUILD_NAME}" "${BUILD_NUMBER}" \
-  --server-id="${SERVER_ID}" \
-  --fail=false \
-  --format=table \
-  --vuln=true || true
+#
+# Xray indexing the just-published build-info is not instant, and firing
+# the scan right after the PUT produced inconsistent results on live CI
+# runs: a transient 404 "build doesn't exist or not indexed in Xray" on one
+# board, a scan that completed but found nothing on another -- yet the
+# same publish+scan sequence run by hand, with natural delay between
+# commands, found the expected CVEs every time. So: retry until the scan
+# actually reports something other than a clean "no vulnerabilities" (our
+# declared components always carry known CVEs, so an empty result here
+# means indexing hasn't caught up yet, not a genuine negative). The first
+# attempt is a plain scan (this build has never been scanned before, so
+# --rescan=true would itself 404); once that attempt has registered once,
+# later retries need --rescan=true to force Xray to re-evaluate rather
+# than return the earlier empty result.
+MAX_ATTEMPTS=5
+for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+  RESCAN_FLAG=""
+  if [[ "${attempt}" -gt 1 ]]; then
+    sleep 15
+    RESCAN_FLAG="--rescan=true"
+  fi
+  SCAN_OUTPUT="$(jf build-scan "${BUILD_NAME}" "${BUILD_NUMBER}" --server-id="${SERVER_ID}" --fail=false ${RESCAN_FLAG} --format=table --vuln=true 2>&1)" || true
+  echo "${SCAN_OUTPUT}"
+  if ! grep -q "No vulnerable dependencies were found" <<<"${SCAN_OUTPUT}"; then
+    break
+  fi
+  echo "==> attempt ${attempt}/${MAX_ATTEMPTS}: no vulnerabilities matched yet -- Xray may still be indexing this build"
+done
 
 echo
 echo "Done. View in the Artifactory UI:"
