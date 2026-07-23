@@ -68,6 +68,18 @@ sha256_of() {
   fi
 }
 
+sha1_of() {
+  local file="$1"
+  if command -v sha1sum >/dev/null 2>&1; then
+    sha1sum "${file}" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 1 "${file}" | awk '{print $1}'
+  else
+    echo "ERROR: need sha1sum or shasum on PATH" >&2
+    exit 1
+  fi
+}
+
 echo "==> Building dependency list from vendored sources"
 DEPENDENCIES_JSON="[]"
 for entry in "${VENDORED_COMPONENTS[@]}"; do
@@ -81,13 +93,19 @@ for entry in "${VENDORED_COMPONENTS[@]}"; do
   fi
 
   sha256="$(sha256_of "${abs_path}")"
-  echo "  + ${component_id}  <-  ${rel_path}  (sha256=${sha256:0:12}…)"
+  # Xray's build-scan dependency matcher keys off sha1, same as every other
+  # ecosystem's build-info dependencies -- omitting it (sha256 alone) means
+  # the id matches Xray's catalog fine via direct component-summary lookup
+  # but the build scanner itself doesn't pick up the vulnerability data.
+  sha1="$(sha1_of "${abs_path}")"
+  echo "  + ${component_id}  <-  ${rel_path}  (sha1=${sha1:0:12}…)"
 
   DEPENDENCIES_JSON="$(
     jq --arg id "${component_id}" \
        --arg sha "${sha256}" \
+       --arg sha1 "${sha1}" \
        --arg path "${rel_path}" \
-       '. + [{"type":"cpp","id":$id,"sha256":$sha,"requestedBy":[[$path]]}]' \
+       '. + [{"type":"cpp","id":$id,"sha1":$sha1,"sha256":$sha,"requestedBy":[[$path]]}]' \
        <<<"${DEPENDENCIES_JSON}"
   )"
 done
@@ -139,10 +157,15 @@ echo "==> Triggering Xray build scan"
 # --fail=false so a demo run with real CVEs doesn't kill CI while we're
 # still wiring things up. Flip to --fail=true once the pipeline is
 # expected to gate promotion on scan results.
+# --rescan=true: build.sh already scans this exact build name+number right
+# after publishing it (before this script's dependencies exist). Without
+# --rescan, Xray treats this as an already-scanned build and returns that
+# earlier (dependency-less) result instead of reprocessing.
 jf build-scan \
   "${BUILD_NAME}" "${BUILD_NUMBER}" \
   --server-id="${SERVER_ID}" \
   --fail=false \
+  --rescan=true \
   --format=table \
   --vuln=true || true
 
