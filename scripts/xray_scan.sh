@@ -153,6 +153,20 @@ jf rt curl \
   --server-id="${SERVER_ID}"
 
 echo
+
+# BOARD_A and BOARD_B are separate build NUMBERS but the same build NAME
+# (envsensor-fw), and both matrix jobs publish+scan at roughly the same
+# moment. Confirmed empirically that this causes real contention, not just
+# a generic indexing delay: retrying the losing board's scan (even with
+# --rescan=true, even minutes later) kept returning an empty result, while
+# the other board succeeded on its very first attempt. Stagger BOARD_B's
+# start so the two boards don't hit Xray's indexing for the same build
+# name at the same instant.
+if [[ "${BOARD}" == "BOARD_B" ]]; then
+  echo "==> Staggering scan start by 20s to avoid concurrent-board contention on Xray indexing for ${BUILD_NAME}"
+  sleep 20
+fi
+
 echo "==> Triggering Xray build scan"
 # --fail=false so a demo run with real CVEs doesn't kill CI while we're
 # still wiring things up. Flip to --fail=true once the pipeline is
