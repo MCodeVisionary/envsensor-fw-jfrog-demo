@@ -153,6 +153,15 @@ jf rt curl \
   --server-id="${SERVER_ID}"
 
 echo
+# Give Xray's backend a moment to index the just-published build-info
+# before triggering a scan against it. Confirmed empirically: firing the
+# scan immediately after the PUT produced inconsistent results on live CI
+# runs (a transient 404 "build doesn't exist or not indexed in Xray" on one
+# board, a scan that completed but found nothing on the other) even though
+# the same publish+scan sequence run by hand, with natural delay between
+# commands, found the expected CVEs every time.
+sleep 10
+
 echo "==> Triggering Xray build scan"
 # --fail=false so a demo run with real CVEs doesn't kill CI while we're
 # still wiring things up. Flip to --fail=true once the pipeline is
