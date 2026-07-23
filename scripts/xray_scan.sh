@@ -105,8 +105,12 @@ jf rt bp \
 
 # 'jf rt bp --dry-run' may or may not include a modules array depending on
 # whether prior 'jf rt bce' / 'jf rt ba' calls populated one. Force it to
-# exist so our jq expression is well-defined.
-jq 'if has("modules") | not then . + {"modules":[]} else . end' \
+# exist so our jq expression is well-defined. Also force top-level
+# "version" — Artifactory's build-info deserializer requires it and rejects
+# the whole payload with an opaque "unable to parse JSON" 400 if it's
+# missing, which newer 'jf rt bp --dry-run' output doesn't always stamp in.
+jq 'if has("modules") | not then . + {"modules":[]} else . end
+    | if has("version") | not then . + {"version":"1.0.1"} else . end' \
   "${WORK_DIR}/skeleton.json" > "${WORK_DIR}/with_modules.json"
 
 echo "==> Injecting cpp module + vendored dependencies"
